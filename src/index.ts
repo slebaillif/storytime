@@ -1,1 +1,2 @@
-console.log('Happy developing ✨')
+// Entry point moved to main.tsx
+export {};

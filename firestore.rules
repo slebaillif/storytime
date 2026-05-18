@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /stories/{storyId} {
+      allow read: if resource.data.isPublished == true
+                  || (request.auth != null && request.auth.uid == resource.data.authorId);
+      allow create: if request.auth != null
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if request.auth != null
+                             && request.auth.uid == resource.data.authorId;
+    }
+  }
+}
