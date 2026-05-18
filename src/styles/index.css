@@ -266,6 +266,7 @@ a { color: inherit; text-decoration: none; }
 .toolbar-title-input:hover { background: var(--surface-2); }
 .toolbar-title-input:focus { background: var(--surface-2); }
 .save-status { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.save-error { color: var(--danger); cursor: help; }
 
 .editor-body {
   display: flex;

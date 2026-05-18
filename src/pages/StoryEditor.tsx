@@ -182,6 +182,7 @@ export default function StoryEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(true);
+  const [saveError, setSaveError] = useState('');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Refs so doSave always reads the latest values without stale closures
@@ -210,17 +211,24 @@ export default function StoryEditor() {
     const currentStory = storyRef.current;
     if (!storyId || !currentStory) return;
     setSaving(true);
-    await updateDoc(doc(db, 'stories', storyId), {
-      title: currentStory.title,
-      description: currentStory.description,
-      isPublished: currentStory.isPublished,
-      startNodeId: currentStory.startNodeId,
-      nodes: nodesRef.current.map(nodeToRecord),
-      edges: edgesRef.current.map(edgeToRecord),
-      updatedAt: serverTimestamp(),
-    });
-    setSaving(false);
-    setSaved(true);
+    setSaveError('');
+    try {
+      await updateDoc(doc(db, 'stories', storyId), {
+        title: currentStory.title,
+        description: currentStory.description,
+        isPublished: currentStory.isPublished,
+        startNodeId: currentStory.startNodeId,
+        nodes: nodesRef.current.map(nodeToRecord),
+        edges: edgesRef.current.map(edgeToRecord),
+        updatedAt: serverTimestamp(),
+      });
+      setSaved(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
+      setSaved(false);
+    } finally {
+      setSaving(false);
+    }
   }, [storyId]);
 
   const scheduleSave = useCallback(() => {
@@ -269,7 +277,8 @@ export default function StoryEditor() {
 
   const handleEdgesChange: typeof onEdgesChange = (changes) => {
     onEdgesChange(changes);
-    scheduleSave();
+    const mutating = changes.some((c) => c.type !== 'select');
+    if (mutating) scheduleSave();
   };
 
   const addNode = () => {
@@ -352,12 +361,22 @@ export default function StoryEditor() {
           onChange={(e) => updateStoryMeta({ title: e.target.value })}
           placeholder="Story title..."
         />
-        <span className="save-status">{saving ? 'Saving…' : saved ? 'Saved' : 'Unsaved'}</span>
+        {saveError
+          ? <span className="save-status save-error" title={saveError}>⚠ Save failed</span>
+          : <span className="save-status">{saving ? 'Saving…' : saved ? 'Saved' : 'Unsaved'}</span>
+        }
+        <button
+          className="btn btn-ghost"
+          onClick={() => { clearTimeout(saveTimerRef.current); doSave(); }}
+          disabled={saving}
+        >
+          Save
+        </button>
         <button
           className={`btn ${story?.isPublished ? 'btn-success' : 'btn-primary'}`}
           onClick={() => updateStoryMeta({ isPublished: !story?.isPublished })}
         >
-          {story?.isPublished ? 'Published' : 'Publish'}
+          {story?.isPublished ? 'Unpublish' : 'Publish'}
         </button>
         {story?.isPublished && (
           <button className="btn btn-ghost" onClick={() => window.open(`/story/${storyId}`, '_blank')}>
