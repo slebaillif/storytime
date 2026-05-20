@@ -5,12 +5,14 @@ export interface NodeData extends Record<string, unknown> {
   content: string;
   isEnding: boolean;
   isStart: boolean;
+  imageUrl?: string;
 }
 
 export interface NodeStorageData {
   title: string;
   content: string;
   isEnding: boolean;
+  imageUrl?: string;
 }
 
 export interface StoryNodeRecord {

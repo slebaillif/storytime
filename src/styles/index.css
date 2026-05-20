@@ -327,15 +327,13 @@ a { color: inherit; text-decoration: none; }
 .sn-badge-start { background: rgba(44, 182, 125, 0.2); color: var(--success); }
 .sn-badge-end { background: rgba(255, 68, 102, 0.2); color: var(--danger); }
 .sn-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-image { width: 100%; height: 72px; overflow: hidden; border-radius: 6px; margin-bottom: 8px; }
+.sn-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sn-preview { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 .sn-preview em { color: var(--border); }
 
 /* ── Add node FAB ───────────────────────────────────────────── */
 .add-node-fab {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  z-index: 5;
   background: var(--primary);
   color: #fff;
   border: none;
@@ -345,6 +343,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600;
   box-shadow: var(--shadow);
   transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
 }
 .add-node-fab:hover { background: var(--primary-dark); transform: translateY(-1px); }
 
@@ -400,6 +399,7 @@ a { color: inherit; text-decoration: none; }
   gap: 0;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 .ne-section {
   padding: 14px 16px;
@@ -462,6 +462,47 @@ a { color: inherit; text-decoration: none; }
 }
 .ne-delete-edge:hover { background: var(--surface-2); color: var(--danger); }
 .ne-hint { font-size: 11px; color: var(--border); }
+
+/* ── Node editor — image upload ─────────────────────────────── */
+.ne-image-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ne-image-preview img {
+  width: 100%;
+  border-radius: var(--radius);
+  object-fit: cover;
+  max-height: 140px;
+}
+.ne-remove-image {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.ne-remove-image:hover { background: rgba(255, 68, 102, 0.08); }
+.ne-upload-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.ne-upload-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.ne-uploading { opacity: 0.6; cursor: wait; }
+.ne-upload-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+
 .ne-actions {
   padding: 14px 16px;
   display: flex;
@@ -560,3 +601,35 @@ a { color: inherit; text-decoration: none; }
 }
 .back-btn { align-self: flex-start; color: #8b6fc8; border-color: #c9b8f0; }
 .back-btn:hover { background: #f5f0ff; }
+
+/* ── Reader two-column layout ───────────────────────────────── */
+.reader-two-col {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+}
+.reader-image-col {
+  flex: 1;
+  position: sticky;
+  top: 52px;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.reader-image-col img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.reader-text-col {
+  flex: 1;
+  padding: 56px 48px 80px;
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .reader-two-col { flex-direction: column; }
+  .reader-image-col { position: relative; top: 0; height: 260px; width: 100%; }
+  .reader-text-col { padding: 32px 24px 64px; }
+}

@@ -136,7 +136,7 @@ export default function WriterDashboard() {
                   Edit
                 </button>
                 {story.isPublished && (
-                  <button className="btn btn-ghost" onClick={() => window.open(`/story/${story.id}`, '_blank')}>
+                  <button className="btn btn-ghost" onClick={() => navigate(`/story/${story.id}`)}>
                     Read
                   </button>
                 )}

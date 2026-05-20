@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ReactFlow, Background, Controls, MiniMap,
+  ReactFlow, Background, Controls, MiniMap, Panel,
   addEdge, useNodesState, useEdgesState,
   Handle, Position,
   type Connection, type Node, type Edge,
@@ -9,7 +9,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useAuth } from '../hooks/useAuth';
 import type { Story, NodeData, NodeStorageData, StoryNodeRecord, StoryEdgeRecord } from '../types';
 
@@ -27,6 +28,11 @@ function StoryNode({ data, selected }: NodeProps) {
   return (
     <div className={classList}>
       <Handle type="target" position={Position.Top} className="sn-handle" />
+      {d.imageUrl && (
+        <div className="sn-image">
+          <img src={d.imageUrl} alt="" />
+        </div>
+      )}
       <div className="sn-badges">
         {d.isStart && <span className="sn-badge sn-badge-start">START</span>}
         {d.isEnding && <span className="sn-badge sn-badge-end">END</span>}
@@ -48,6 +54,7 @@ const nodeTypes = { storyNode: StoryNode };
 
 interface NodeEditorProps {
   node: Node;
+  storyId: string;
   outgoingEdges: Edge[];
   allNodes: Node[];
   isStart: boolean;
@@ -59,10 +66,33 @@ interface NodeEditorProps {
 }
 
 function NodeEditor({
-  node, outgoingEdges, allNodes, isStart,
+  node, storyId, outgoingEdges, allNodes, isStart,
   onUpdate, onUpdateEdgeLabel, onDeleteEdge, onSetStart, onDelete,
 }: NodeEditorProps) {
   const d = node.data as NodeData;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const path = `stories/${storyId}/${node.id}`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, file);
+      const url = await getDownloadURL(ref);
+      onUpdate({ imageUrl: url });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="node-editor">
       <div className="ne-section">
@@ -84,6 +114,37 @@ function NodeEditor({
           rows={8}
         />
       </div>
+
+      <div className="ne-section">
+        <label className="ne-label">Image</label>
+        {d.imageUrl ? (
+          <div className="ne-image-preview">
+            <img src={d.imageUrl} alt="Passage" />
+            <button className="ne-remove-image" onClick={() => onUpdate({ imageUrl: '' })}>
+              Remove image
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            <button
+              className={`ne-upload-btn ${uploading ? 'ne-uploading' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? 'Uploading…' : '+ Upload image'}
+            </button>
+            {uploadError && <p className="ne-upload-error">{uploadError}</p>}
+          </>
+        )}
+      </div>
+
       <div className="ne-section">
         <label className="ne-checkbox">
           <input
@@ -104,7 +165,7 @@ function NodeEditor({
               <div key={edge.id} className="ne-choice">
                 <input
                   className="ne-input ne-choice-input"
-                  value={(edge.label as string) ?? ''}
+                  value={(edge.data?.label as string) ?? (edge.label as string) ?? ''}
                   onChange={(e) => onUpdateEdgeLabel(edge.id, e.target.value)}
                   placeholder="Choice label..."
                 />
@@ -137,12 +198,13 @@ function NodeEditor({
 
 function nodeToRecord(n: Node): StoryNodeRecord {
   const d = n.data as NodeData;
-  return {
-    id: n.id,
-    type: n.type ?? 'storyNode',
-    position: n.position,
-    data: { title: d.title, content: d.content, isEnding: d.isEnding } satisfies NodeStorageData,
-  };
+  const data: NodeStorageData = { title: d.title, content: d.content, isEnding: d.isEnding };
+  if (d.imageUrl) data.imageUrl = d.imageUrl;
+  return { id: n.id, type: n.type ?? 'storyNode', position: n.position, data };
+}
+
+function truncateLabel(label: string) {
+  return label.length > 20 ? label.slice(0, 20) + '…' : label;
 }
 
 function edgeToRecord(e: Edge): StoryEdgeRecord {
@@ -150,7 +212,7 @@ function edgeToRecord(e: Edge): StoryEdgeRecord {
     id: e.id,
     source: e.source,
     target: e.target,
-    label: (e.label as string) ?? '',
+    label: (e.data?.label as string) ?? (e.label as string) ?? '',
   };
 }
 
@@ -164,7 +226,8 @@ function recordToEdge(r: StoryEdgeRecord): Edge {
     id: r.id,
     source: r.source,
     target: r.target,
-    label: r.label,
+    label: truncateLabel(r.label),
+    data: { label: r.label },
     type: 'smoothstep',
     animated: false,
   };
@@ -224,6 +287,7 @@ export default function StoryEditor() {
       });
       setSaved(true);
     } catch (err) {
+      console.error('Save failed:', err);
       setSaveError(err instanceof Error ? err.message : 'Save failed');
       setSaved(false);
     } finally {
@@ -263,6 +327,7 @@ export default function StoryEditor() {
       ...connection,
       id: `edge-${Date.now()}`,
       label: 'Continue...',
+      data: { label: 'Continue...' },
       type: 'smoothstep',
     } as Edge;
     setEdges((eds) => addEdge(newEdge, eds));
@@ -315,7 +380,9 @@ export default function StoryEditor() {
   };
 
   const updateEdgeLabel = (edgeId: string, label: string) => {
-    setEdges((eds) => eds.map((e) => e.id === edgeId ? { ...e, label } : e));
+    setEdges((eds) => eds.map((e) =>
+      e.id === edgeId ? { ...e, label: truncateLabel(label), data: { ...e.data, label } } : e
+    ));
     scheduleSave();
   };
 
@@ -401,9 +468,11 @@ export default function StoryEditor() {
           >
             <Background color="#2a2a40" gap={20} />
             <Controls />
-            <MiniMap nodeColor="#7c5cbf" maskColor="rgba(13,13,20,0.7)" />
+            <Panel position="bottom-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, margin: 0 }}>
+              <button className="add-node-fab" onClick={addNode}>+ Passage</button>
+              <MiniMap nodeColor="#7c5cbf" maskColor="rgba(13,13,20,0.7)" style={{ position: 'static', margin: 0 }} />
+            </Panel>
           </ReactFlow>
-          <button className="add-node-fab" onClick={addNode}>+ Passage</button>
         </div>
 
         {/* Side panel */}
@@ -416,6 +485,7 @@ export default function StoryEditor() {
               </div>
               <NodeEditor
                 node={selectedNode}
+                storyId={storyId ?? ''}
                 outgoingEdges={outgoingEdges}
                 allNodes={nodes}
                 isStart={story?.startNodeId === selectedNodeId}

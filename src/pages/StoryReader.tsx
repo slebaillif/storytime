@@ -69,6 +69,49 @@ export default function StoryReader() {
   );
 
   const isEnding = currentNode.data.isEnding || choices.length === 0;
+  const imageUrl = currentNode.data.imageUrl;
+
+  const textAndChoices = (
+    <>
+      <div className="passage">
+        <h2 className="passage-title">{currentNode.data.title}</h2>
+        <div className="passage-text">
+          {currentNode.data.content.split('\n').map((line, i) => (
+            <p key={i}>{line}</p>
+          ))}
+        </div>
+      </div>
+
+      <div className="reader-footer">
+        {isEnding ? (
+          <div className="ending">
+            <p className="ending-label">— The End —</p>
+            <button className="btn btn-primary" onClick={restart}>Read again</button>
+          </div>
+        ) : (
+          <div className="choices">
+            {choices.map((edge) => {
+              const target = story.nodes.find((n) => n.id === edge.target);
+              return (
+                <button
+                  key={edge.id}
+                  className="choice-btn"
+                  onClick={() => makeChoice(edge.target)}
+                >
+                  {edge.label || `Go to ${target?.data.title || 'next passage'}`}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {history.length > 0 && (
+          <button className="btn btn-ghost back-btn" onClick={goBack}>
+            ← Go back
+          </button>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div className="reader-page">
@@ -78,45 +121,20 @@ export default function StoryReader() {
         <button className="btn btn-ghost" onClick={restart}>Restart</button>
       </div>
 
-      <div className="reader-content">
-        <div className="passage">
-          <h2 className="passage-title">{currentNode.data.title}</h2>
-          <div className="passage-text">
-            {currentNode.data.content.split('\n').map((line, i) => (
-              <p key={i}>{line}</p>
-            ))}
+      {imageUrl ? (
+        <div className="reader-two-col">
+          <div className="reader-image-col">
+            <img src={imageUrl} alt={currentNode.data.title} />
+          </div>
+          <div className="reader-text-col">
+            {textAndChoices}
           </div>
         </div>
-
-        <div className="reader-footer">
-          {isEnding ? (
-            <div className="ending">
-              <p className="ending-label">— The End —</p>
-              <button className="btn btn-primary" onClick={restart}>Read again</button>
-            </div>
-          ) : (
-            <div className="choices">
-              {choices.map((edge) => {
-                const target = story.nodes.find((n) => n.id === edge.target);
-                return (
-                  <button
-                    key={edge.id}
-                    className="choice-btn"
-                    onClick={() => makeChoice(edge.target)}
-                  >
-                    {edge.label || `Go to ${target?.data.title || 'next passage'}`}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {history.length > 0 && (
-            <button className="btn btn-ghost back-btn" onClick={goBack}>
-              ← Go back
-            </button>
-          )}
+      ) : (
+        <div className="reader-content">
+          {textAndChoices}
         </div>
-      </div>
+      )}
     </div>
   );
 }
