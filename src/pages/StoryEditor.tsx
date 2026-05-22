@@ -50,6 +50,161 @@ function StoryNode({ data, selected }: NodeProps) {
 
 const nodeTypes = { storyNode: StoryNode };
 
+// ─── Focused passage editor (full-screen overlay) ────────────────────────────
+
+interface FocusedEditorProps {
+  node: Node;
+  storyId: string;
+  outgoingEdges: Edge[];
+  allNodes: Node[];
+  isStart: boolean;
+  onUpdate: (updates: Partial<NodeData>) => void;
+  onUpdateEdgeLabel: (edgeId: string, label: string) => void;
+  onDeleteEdge: (edgeId: string) => void;
+  onSetStart: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+function FocusedPassageEditor({
+  node, storyId, outgoingEdges, allNodes, isStart,
+  onUpdate, onUpdateEdgeLabel, onDeleteEdge, onSetStart, onDelete, onClose,
+}: FocusedEditorProps) {
+  const d = node.data as NodeData;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const path = `stories/${storyId}/${node.id}`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, file);
+      const url = await getDownloadURL(ref);
+      onUpdate({ imageUrl: url });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div className="fp-overlay">
+      <div className="fp-header">
+        <input
+          className="fp-title-input"
+          value={d.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
+          placeholder="Passage title..."
+        />
+        <button className="fp-close" onClick={onClose} title="Close (Esc)">×</button>
+      </div>
+
+      <div className="fp-body">
+        {/* Left: image */}
+        <div className="fp-image-col">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+          {d.imageUrl ? (
+            <>
+              <img className="fp-image" src={d.imageUrl} alt="" />
+              <button className="fp-image-remove" onClick={() => onUpdate({ imageUrl: '' })}>
+                Remove image
+              </button>
+            </>
+          ) : (
+            <button
+              className={`fp-upload-zone ${uploading ? 'fp-uploading' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <span>{uploading ? 'Uploading…' : 'Click to upload image'}</span>
+              {uploadError && <span className="fp-upload-error">{uploadError}</span>}
+            </button>
+          )}
+        </div>
+
+        {/* Right: content + settings */}
+        <div className="fp-right">
+          <div className="fp-section fp-section-content">
+            <label className="ne-label">Content</label>
+            <textarea
+              className="fp-textarea"
+              value={d.content}
+              onChange={(e) => onUpdate({ content: e.target.value })}
+              placeholder="Write your story here..."
+              autoFocus
+            />
+          </div>
+
+          {outgoingEdges.length > 0 && (
+            <div className="fp-section">
+              <label className="ne-label">Choices</label>
+              {outgoingEdges.map((edge) => {
+                const target = allNodes.find((n) => n.id === edge.target);
+                return (
+                  <div key={edge.id} className="ne-choice">
+                    <input
+                      className="ne-input ne-choice-input"
+                      value={(edge.data?.label as string) ?? (edge.label as string) ?? ''}
+                      onChange={(e) => onUpdateEdgeLabel(edge.id, e.target.value)}
+                      placeholder="Choice label..."
+                    />
+                    <span className="ne-choice-target">
+                      → {(target?.data as NodeData)?.title || 'Untitled'}
+                    </span>
+                    <button className="ne-delete-edge" onClick={() => onDeleteEdge(edge.id)} title="Remove choice">×</button>
+                  </div>
+                );
+              })}
+              <p className="ne-hint">Draw arrows on the canvas to add more choices.</p>
+            </div>
+          )}
+
+          <div className="fp-section fp-footer">
+            <label className="ne-checkbox">
+              <input
+                type="checkbox"
+                checked={d.isEnding}
+                onChange={(e) => onUpdate({ isEnding: e.target.checked })}
+              />
+              Mark as ending
+            </label>
+            <div className="fp-actions">
+              {!isStart && (
+                <button className="btn btn-ghost ne-btn" onClick={onSetStart}>Set as start</button>
+              )}
+              <button className="btn btn-danger-ghost ne-btn" onClick={onDelete}>Delete passage</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Node editor side panel ──────────────────────────────────────────────────
 
 interface NodeEditorProps {
@@ -242,6 +397,7 @@ export default function StoryEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [focusOpen, setFocusOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(true);
@@ -410,6 +566,7 @@ export default function StoryEditor() {
 
   const onSelectionChange = useCallback(({ nodes: sel }: OnSelectionChangeParams) => {
     setSelectedNodeId(sel.length === 1 ? sel[0].id : null);
+    setFocusOpen(false);
   }, []);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -481,7 +638,14 @@ export default function StoryEditor() {
             <>
               <div className="panel-header">
                 <span>Edit Passage</span>
-                <button className="panel-close" onClick={() => setSelectedNodeId(null)}>×</button>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <button className="panel-expand" onClick={() => setFocusOpen(true)} title="Focused editor">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor">
+                      <path d="M0 0v4h1.5V1.5H4V0H0zm9 0v1.5h2.5V4H13V0H9zM0 9v4h4v-1.5H1.5V9H0zm11.5 2.5H9V13h4V9h-1.5v2.5z"/>
+                    </svg>
+                  </button>
+                  <button className="panel-close" onClick={() => setSelectedNodeId(null)}>×</button>
+                </div>
               </div>
               <NodeEditor
                 node={selectedNode}
@@ -495,6 +659,21 @@ export default function StoryEditor() {
                 onSetStart={setAsStart}
                 onDelete={deleteSelectedNode}
               />
+              {focusOpen && (
+                <FocusedPassageEditor
+                  node={selectedNode}
+                  storyId={storyId ?? ''}
+                  outgoingEdges={outgoingEdges}
+                  allNodes={nodes}
+                  isStart={story?.startNodeId === selectedNodeId}
+                  onUpdate={updateSelectedNodeData}
+                  onUpdateEdgeLabel={updateEdgeLabel}
+                  onDeleteEdge={deleteEdge}
+                  onSetStart={setAsStart}
+                  onDelete={deleteSelectedNode}
+                  onClose={() => setFocusOpen(false)}
+                />
+              )}
             </>
           ) : (
             <div className="panel-empty">
